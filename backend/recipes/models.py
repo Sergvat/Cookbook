@@ -137,20 +137,39 @@ class ShoppingList(models.Model):
         related_name='shoplist',
         verbose_name='Пользователь'
     )
-    recipe = models.ForeignKey(
-        Recipe, on_delete=models.CASCADE,
-        related_name='shoplist',
-        verbose_name='Рецепт'
+    ingredients = models.ManyToManyField(
+        Ingredient,
+        through='IngredientToShoppingList',
+        verbose_name='Ингредиенты'
     )
 
     class Meta:
         verbose_name = 'Список покупок'
-        constraints = [
-            models.UniqueConstraint(
-                fields=['user', 'recipe'],
-                name='unique_shoppinglist'
-            )
-        ]
 
     def __str__(self):
-        return f'{self.user} - {self.recipe}.'
+        return f'{self.user} - {self.ingredient}.'
+
+
+class IngredientToShoppingList(models.Model):
+    ingredient = models.ForeignKey(
+        Ingredient,
+        verbose_name='Ингредиент',
+        on_delete=models.CASCADE
+    )
+    shopping_list = models.ForeignKey(
+        ShoppingList,
+        verbose_name='Список покупок',
+        on_delete=models.CASCADE
+    )
+    amount = models.PositiveIntegerField(
+        verbose_name='Количество',
+        validators=[
+            MinValueValidator(1, 'Минимальное количество = 1')
+        ]
+    )
+
+    class Meta:
+        verbose_name = 'Ингредиент для списка покупок'
+
+    def __str__(self):
+        return f'{self.ingredient} - {self.amount}.'
