@@ -43,13 +43,10 @@ class Recipe(models.Model):
         Ingredient,
         through='IngredientToRecipe',
         verbose_name='Ингредиенты',
-        related_name='recipes',
     )
     tags = models.ManyToManyField(
         Tag,
-        through='TagToRecipe',
         verbose_name='Тег',
-        related_name='recipes',
     )
     image = models.BinaryField(
         verbose_name='Изображение',
@@ -109,17 +106,6 @@ class IngredientToRecipe(models.Model):
         return f'{self.ingredient.name} - {self.amount}.'
 
 
-class TagToRecipe(models.Model):
-    tag = models.ForeignKey(Tag, on_delete=models.CASCADE)
-    recipe = models.ForeignKey(Recipe, on_delete=models.CASCADE)
-
-    class Meta:
-        verbose_name = 'Тег для рецепта'
-
-    def __str__(self):
-        return f'Теги {self.tag} для рецепта {self.recipe}.'
-
-
 class FavoriteRecipe(models.Model):
     user = models.ForeignKey(
         CustomUser, on_delete=models.CASCADE,
@@ -138,6 +124,31 @@ class FavoriteRecipe(models.Model):
             models.UniqueConstraint(
                 fields=['user', 'recipe'],
                 name='unique_user_recipe'
+            )
+        ]
+
+    def __str__(self):
+        return f'{self.user} - {self.recipe}.'
+
+
+class ShoppingList(models.Model):
+    user = models.ForeignKey(
+        CustomUser, on_delete=models.CASCADE,
+        related_name='shoplist',
+        verbose_name='Пользователь'
+    )
+    recipe = models.ForeignKey(
+        Recipe, on_delete=models.CASCADE,
+        related_name='shoplist',
+        verbose_name='Рецепт'
+    )
+
+    class Meta:
+        verbose_name = 'Список покупок'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user', 'recipe'],
+                name='unique_shoppinglist'
             )
         ]
 
