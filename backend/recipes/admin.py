@@ -9,6 +9,11 @@ class TagAdmin(admin.ModelAdmin):
     list_display = ('name', 'color', 'slug')
 
 
+class IngredientInLine(admin.TabularInline):
+    model = IngredientToRecipe
+
+
+
 @admin.register(Recipe)
 class RecipeAdmin(admin.ModelAdmin):
     list_display = (
@@ -22,6 +27,7 @@ class RecipeAdmin(admin.ModelAdmin):
         # 'is_in_shopping_cart'
     )
     list_filter = ('name', 'author',)
+    inlines = (IngredientInLine,)
 
 
 @admin.register(Ingredient)
@@ -38,3 +44,5 @@ class IngredientToRecipeAdmin(admin.ModelAdmin):
 @admin.register(FavoriteRecipe)
 class FavoriteRecipeAdmin(admin.ModelAdmin):
     list_display = ('user', 'recipe')
+
+

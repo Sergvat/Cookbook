@@ -1,13 +1,16 @@
 from django.shortcuts import get_object_or_404
 from rest_framework import viewsets, generics, mixins, permissions, status
 from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.decorators import action
 
 
+from .permissions import IsAuthorOrReadOnly
 from users.models import Subscription, CustomUser
-from recipes.models import Tag, Recipe, Ingredient
-from api.serializers import (SubscriptionsSerializer, TagSerializer,
-                             IngredientSerializer, RecipeSerializer,
-                             RecipeCreateSerializer)
+from recipes.models import Tag, Recipe, Ingredient, ShoppingList
+from .serializers import (SubscriptionsSerializer, TagSerializer,
+                          IngredientSerializer, RecipeSerializer,
+                          RecipeCreateSerializer, ShoppingListSerializer)
 
 
 class SubscriptionCreateDestroyAPIView(mixins.CreateModelMixin,
@@ -48,28 +51,73 @@ class SubscriptionCreateDestroyAPIView(mixins.CreateModelMixin,
         )
 
 
-class TagViewSet(generics.ListCreateAPIView,
+class TagViewSet(mixins.ListModelMixin,
                  viewsets.GenericViewSet):
     queryset = Tag.objects.all()
     serializer_class = TagSerializer
     pagination_class = None
 
 
-class IngredientViewSet(generics.ListCreateAPIView,
+class IngredientViewSet(mixins.ListModelMixin,
                         viewsets.GenericViewSet):
     queryset = Ingredient.objects.all()
     serializer_class = IngredientSerializer
     pagination_class = None
 
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        name = self.request.query_params.get('name')
+        if name:
+            queryset = queryset.filter(name__startswith=name)
+        return queryset
+
+
+class ShoppingListViewSet(generics.ListAPIView):
+    serializer_class = ShoppingListSerializer
+    permission_classes = (IsAuthenticated,)
+
+    def get_queryset(self):
+        return ShoppingList.objects.filter(user=self.request.user)
+
 
 class RecipeViewSet(viewsets.ModelViewSet):
     queryset = Recipe.objects.all()
     serializer_class = RecipeSerializer
+    permission_classes = (IsAuthorOrReadOnly,)
 
     def get_serializer_class(self):
-        if self.action == 'create':
+        if self.action in ('create', 'update', 'partial_update'):
             return RecipeCreateSerializer
         return RecipeSerializer
 
     def perform_create(self, serializer):
         serializer.save(author=self.request.user)
+
+    # @action(detail=True, methods=['post', 'delete'])
+    # def favorite(self, request, pk=None):
+    #     recipe = self.get_object()
+    #     if request.metod == 'post':
+
+    #     if request.metod == 'delete':
+
+    #     return Response(serializer.data,
+    #                         status=status.)
+
+    # @action(detail=True, methods=['post', 'delete'])
+    # def shopping_cart(self, request, pk=None):
+    #     if request.metod == 'post':
+
+    #     if request.metod == 'delete':
+
+    #     return Response(serializer.data,
+    #                         status=status.)
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        author = self.request.query_params.get('author')
+        tags = self.request.query_params.get('tags')
+        if author:
+            queryset = queryset.filter(author_id=int(author))
+        if len(tags):
+            queryset = queryset.filter(tags__in=tags)
+        return queryset
