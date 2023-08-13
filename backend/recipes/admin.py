@@ -13,7 +13,6 @@ class IngredientInLine(admin.TabularInline):
     model = IngredientToRecipe
 
 
-
 @admin.register(Recipe)
 class RecipeAdmin(admin.ModelAdmin):
     list_display = (
@@ -44,5 +43,3 @@ class IngredientToRecipeAdmin(admin.ModelAdmin):
 @admin.register(FavoriteRecipe)
 class FavoriteRecipeAdmin(admin.ModelAdmin):
     list_display = ('user', 'recipe')
-
-
