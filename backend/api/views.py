@@ -23,6 +23,7 @@ class SubscriptionCreateDestroyAPIView(mixins.CreateModelMixin,
     serializer_class = SubscriptionsSerializer
     permission_classes = (permissions.IsAuthenticated,)
 
+    # @action(detail=True, methods=['post'])
     def create(self, request, *args, **kwargs):
         author = get_object_or_404(CustomUser, id=kwargs.get('id'))
         if author == request.user:
@@ -41,6 +42,7 @@ class SubscriptionCreateDestroyAPIView(mixins.CreateModelMixin,
             instance=subscription, context=self.get_serializer_context())
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
+    # @action(detail=True, methods=['delete'])
     def destroy(self, request, *args, **kwargs):
         author = get_object_or_404(CustomUser, id=kwargs.get('id'))
         subscription = Subscription.objects.filter(
@@ -55,6 +57,7 @@ class SubscriptionCreateDestroyAPIView(mixins.CreateModelMixin,
 
 
 class TagViewSet(mixins.ListModelMixin,
+                 mixins.RetrieveModelMixin,
                  viewsets.GenericViewSet):
     queryset = Tag.objects.all()
     serializer_class = TagSerializer
@@ -62,6 +65,7 @@ class TagViewSet(mixins.ListModelMixin,
 
 
 class IngredientViewSet(mixins.ListModelMixin,
+                        mixins.RetrieveModelMixin,
                         viewsets.GenericViewSet):
     queryset = Ingredient.objects.all()
     serializer_class = IngredientSerializer
@@ -100,14 +104,14 @@ class RecipeViewSet(viewsets.ModelViewSet):
     def favorite(self, request, pk=None):
         user = self.request.user
         recipe = self.get_object()
-        if request.metod == 'POST':
+        if request.method == 'POST':
             if not FavoriteRecipe.objects.filter(user=user, recipe=recipe).exists():
                 FavoriteRecipe.objects.create(user=user, recipe=recipe)
                 return Response(status=status.HTTP_201_CREATED)
             else:
                 return Response({'error': 'Рецепт уже в избранном.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        if request.metod == 'DELETE':
+        if request.method == 'DELETE':
             favorites = FavoriteRecipe.objects.filter(user=user, recipe=recipe)
             if favorites.exists():
                 favorites.delete()
@@ -119,13 +123,13 @@ class RecipeViewSet(viewsets.ModelViewSet):
     def shopping_cart(self, request, pk=None):
         user = self.request.user
         recipe = self.get_object()
-        if request.metod == 'post':
+        if request.method == 'POST':
             if not ShoppingList.objects.filter(user=user, recipe=recipe).exists():
                 ShoppingList.objects.create(user=user, recipe=recipe)
                 return Response(status=status.HTTP_201_CREATED)
             else:
                 return Response({'error': 'Рецепт уже в корзине.'}, status=status.HTTP_400_BAD_REQUEST)
-        if request.metod == 'delete':
+        if request.method == 'DELETE':
             cart_ingredients = ShoppingList.objects.filter(
                 user=user, recipe=recipe)
             if cart_ingredients.exists():
