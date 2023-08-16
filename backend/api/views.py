@@ -1,29 +1,30 @@
 from django.shortcuts import get_object_or_404
 from django.db.models import Sum
 from django.http import HttpResponse
+from rest_framework.generics import ListAPIView
 from rest_framework import viewsets, generics, mixins, permissions, status
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
 from rest_framework.views import APIView
+from django.db.models import Exists, OuterRef
 
 
 from .permissions import IsAuthorOrReadOnly
 from users.models import Subscription, CustomUser
 from recipes.models import Tag, Recipe, Ingredient, ShoppingList, FavoriteRecipe, IngredientToRecipe
-from .serializers import (SubscriptionsSerializer, TagSerializer,
+from .serializers import (SubscriptionSerializer, SubscriptionListSerializer, TagSerializer,
                           IngredientSerializer, RecipeSerializer,
                           RecipeCreateSerializer, ShoppingListSerializer)
 
 
-class SubscriptionCreateDestroyAPIView(mixins.CreateModelMixin,
-                                       mixins.DestroyModelMixin,
-                                       generics.GenericAPIView):
+class SubscriptionViewSet(viewsets.GenericViewSet,
+                          mixins.CreateModelMixin,
+                          mixins.DestroyModelMixin):
     queryset = Subscription.objects.all()
-    serializer_class = SubscriptionsSerializer
+    serializer_class = SubscriptionSerializer
     permission_classes = (permissions.IsAuthenticated,)
 
-    # @action(detail=True, methods=['post'])
     def create(self, request, *args, **kwargs):
         author = get_object_or_404(CustomUser, id=kwargs.get('id'))
         if author == request.user:
@@ -34,15 +35,13 @@ class SubscriptionCreateDestroyAPIView(mixins.CreateModelMixin,
         subscription, created = Subscription.objects.get_or_create(
             author=author, user=request.user)
         if created:
-            return Response(
-                {'error': 'Подписка уже оформлена'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        serializer = self.get_serializer_class()(
-            instance=subscription, context=self.get_serializer_context())
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+            serializer = self.get_serializer_class()(
+                instance=subscription, context=self.get_serializer_context())
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        else:
+            serializer = self.get_serializer(subscription)
+            return Response(serializer.data, status=status.HTTP_200_OK)
 
-    # @action(detail=True, methods=['delete'])
     def destroy(self, request, *args, **kwargs):
         author = get_object_or_404(CustomUser, id=kwargs.get('id'))
         subscription = Subscription.objects.filter(
@@ -54,6 +53,14 @@ class SubscriptionCreateDestroyAPIView(mixins.CreateModelMixin,
             {'error': 'Вы не являетесь подписчиком данного пользователя'},
             status=status.HTTP_400_BAD_REQUEST
         )
+
+
+class SubscriptionListView(ListAPIView):
+    serializer_class = SubscriptionListSerializer
+    permission_classes = (IsAuthenticated,)
+
+    def get_queryset(self):
+        return Subscription.objects.filter(user=self.request.user)
 
 
 class TagViewSet(mixins.ListModelMixin,
@@ -124,14 +131,15 @@ class RecipeViewSet(viewsets.ModelViewSet):
         user = self.request.user
         recipe = self.get_object()
         if request.method == 'POST':
-            if not ShoppingList.objects.filter(user=user, recipe=recipe).exists():
-                ShoppingList.objects.create(user=user, recipe=recipe)
+            if not ShoppingList.objects.filter(user=user, ingredients__in=recipe.ingredients.all()).exists():
+                ShoppingList.objects.create(
+                    user=user, ingredients=recipe.ingredients.all())
                 return Response(status=status.HTTP_201_CREATED)
             else:
                 return Response({'error': 'Рецепт уже в корзине.'}, status=status.HTTP_400_BAD_REQUEST)
         if request.method == 'DELETE':
             cart_ingredients = ShoppingList.objects.filter(
-                user=user, recipe=recipe)
+                user=user, ingredients__in=recipe.ingredients.all())
             if cart_ingredients.exists():
                 cart_ingredients.delete()
                 return Response(status=status.HTTP_204_NO_CONTENT)
@@ -153,10 +161,22 @@ class RecipeViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(tags__slug__in=tags)
 
         if is_favorited == 'true':
-            queryset = queryset.filter(is_favorited=True)
+            user = self.request.user
+            queryset = queryset.annotate(
+                is_favorited=Exists(
+                    FavoriteRecipe.objects.filter(
+                        user=user, recipe=OuterRef('pk'))
+                )
+            ).filter(is_favorited=True)
 
         if is_in_shopping_cart == 'true':
-            queryset = queryset.filter(is_in_shopping_cart=True)
+            user = self.request.user
+            queryset = queryset.annotate(
+                is_in_shopping_cart=Exists(
+                    ShoppingList.objects.filter(
+                        user=user, recipe=OuterRef('pk'))
+                )
+            ).filter(is_in_shopping_cart=True)
 
         if slug:
             queryset = queryset.filter(tags__slug=slug)
@@ -166,32 +186,20 @@ class RecipeViewSet(viewsets.ModelViewSet):
 
 class ShoppingListDownloadAPIView(APIView):
     def get(self, request, *args, **kwargs):
-        user = request.user
-
         ingredients = IngredientToRecipe.objects.filter(
-            recipe__shoppinglist__user=user).values(
-            'ingredients__name', 'ingredients__measurement_unit').annotate(
+            recipe__shoppinglist__user=request.user).values(
+            'ingredient__name', 'ingredient__measurement_unit').annotate(
             amount=Sum('amount'))
 
-        unique_ingredients = {}
-        for ingredient in ingredients:
-            name = ingredient['ingredients__name']
-            unit = ingredient['ingredients__measurement_unit']
-            amount = ingredient['amount']
-
-            key = (name, unit)
-            if key in unique_ingredients:
-                unique_ingredients[key] += amount
-            else:
-                unique_ingredients[key] = amount
-
         shopping_cart = '\n'.join([
-            f'{name} ({unit}) – {amount}'
-            for (name, unit), amount in unique_ingredients.items()
+            f'{ingredient["ingredient__name"]} '
+            f'({ingredient["ingredient__measurement_unit"]}) – '
+            f'{ingredient["amount"]}'
+            for ingredient in ingredients
         ])
 
         response = HttpResponse(shopping_cart, content_type='text/plain')
-        file_name = f'{user.username}.txt'
-        response['Content-Disposition'] = f'attachment; filename="{file_name}"'
+        response['Content-Disposition'] = (
+            'attachment; filename=shopping_cart.txt')
 
         return response
