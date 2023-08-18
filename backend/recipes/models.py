@@ -54,10 +54,7 @@ class Recipe(models.Model):
         Tag,
         verbose_name='Тег',
     )
-    image = models.BinaryField(
-        verbose_name='Изображение',
-        editable=False,
-    )
+    image = models.ImageField(upload_to='images')
     name = models.CharField(
         max_length=200,
         verbose_name='Название рецепта',
@@ -140,45 +137,24 @@ class FavoriteRecipe(models.Model):
         return f'{self.user} - {self.recipe}.'
 
 
-class ShoppingList(models.Model):
+class RecipeInShoppingList(models.Model):
     user = models.ForeignKey(
         CustomUser, on_delete=models.CASCADE,
-        related_name='shoplist',
+        related_name='shop_list',
         verbose_name='Пользователь'
     )
-    ingredients = models.ManyToManyField(
-        Ingredient,
-        through='IngredientToShoppingList',
-        verbose_name='Ингредиенты'
-    )
+    recipe = models.ForeignKey(
+        Recipe, on_delete=models.CASCADE, verbose_name="Рецепт")
 
     class Meta:
-        verbose_name = 'Список покупок'
-
-    def __str__(self):
-        return f'{self.user} - {self.ingredients}.'
-
-
-class IngredientToShoppingList(models.Model):
-    ingredient = models.ForeignKey(
-        Ingredient,
-        verbose_name='Ингредиент',
-        on_delete=models.CASCADE
-    )
-    shopping_list = models.ForeignKey(
-        ShoppingList,
-        verbose_name='Список покупок',
-        on_delete=models.CASCADE
-    )
-    amount = models.PositiveIntegerField(
-        verbose_name='Количество',
-        validators=[
-            MinValueValidator(1, 'Минимальное количество = 1')
+        verbose_name = 'Рецепт в корзине'
+        verbose_name_plural = 'Рецепты в корзине'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user', 'recipe'],
+                name='unique_cart_item'
+            )
         ]
-    )
-
-    class Meta:
-        verbose_name = 'Ингредиент для списка покупок'
 
     def __str__(self):
-        return f'{self.ingredient} - {self.amount}.'
+        return f'{self.user.email} - {self.recipe.name}.'
