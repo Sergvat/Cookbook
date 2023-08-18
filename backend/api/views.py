@@ -15,7 +15,8 @@ from recipes.models import (Tag, Recipe,
 from .serializers import (SubscriptionSerializer, SubscriptionListSerializer,
                           TagSerializer, FavoriteSerializer,
                           IngredientSerializer, RecipeSerializer,
-                          RecipeCreateSerializer, RecipeInShoppingListSerializer)
+                          RecipeCreateSerializer,
+                          RecipeInShoppingListSerializer)
 
 
 class SubscriptionViewSet(viewsets.GenericViewSet):
@@ -40,7 +41,9 @@ class SubscriptionViewSet(viewsets.GenericViewSet):
                 return Response(
                     serializer.data, status=status.HTTP_201_CREATED)
             else:
-                return Response({'error': 'Подписка уже оформлена'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    {'error': 'Подписка уже оформлена'},
+                    status=status.HTTP_400_BAD_REQUEST)
         elif request.method == 'DELETE':
             subscription = Subscription.objects.filter(
                 author=author, user=request.user)
@@ -104,9 +107,11 @@ class RecipeViewSet(viewsets.ModelViewSet):
         if request.method == 'POST':
             if not FavoriteRecipe.objects.filter(
                     user=user, recipe=recipe).exists():
-                favorite = FavoriteRecipe.objects.create(user=user, recipe=recipe)
+                favorite = FavoriteRecipe.objects.create(
+                    user=user, recipe=recipe)
                 serializer = FavoriteSerializer(favorite)
-                return Response(serializer.data, status=status.HTTP_201_CREATED)
+                return Response(
+                    serializer.data, status=status.HTTP_201_CREATED)
             else:
                 return Response(
                     {'error': 'Рецепт уже в избранном.'},
@@ -127,12 +132,13 @@ class RecipeViewSet(viewsets.ModelViewSet):
         user = self.request.user
         recipe = self.get_object()
         if request.method == 'POST':
-            recipe_in_shopping_list, created = RecipeInShoppingList.objects.get_or_create(
-                recipe=recipe, user=user)
+            recipe_in_shopping_list, created = RecipeInShoppingList.objects.\
+                get_or_create(recipe=recipe, user=user)
             if created:
                 serializer = RecipeInShoppingListSerializer(
                     recipe_in_shopping_list)
-                return Response(serializer.data, status=status.HTTP_201_CREATED)
+                return Response(
+                    serializer.data, status=status.HTTP_201_CREATED)
             else:
                 return Response(
                     {'error': 'Рецепт уже в корзине.'},
@@ -156,20 +162,22 @@ class RecipeViewSet(viewsets.ModelViewSet):
             recipe = item.recipe
             for ingredient in recipe.ingredients.all():
                 if ingredient.id in ingredients.keys():
-                    ingredients[ingredient.id] += IngredientToRecipe.objects.get(
-                        recipe=recipe, ingredient=ingredient).amount
+                    ingredients[ingredient.id] += IngredientToRecipe.objects.\
+                        get(recipe=recipe, ingredient=ingredient).amount
                 else:
-                    ingredients[ingredient.id] = IngredientToRecipe.objects.get(
-                        recipe=recipe, ingredient=ingredient).amount
+                    ingredients[ingredient.id] = IngredientToRecipe.objects.\
+                        get(recipe=recipe, ingredient=ingredient).amount
         result = []
         for id, amount in ingredients.items():
             ingredient = Ingredient.objects.get(id=id)
             result.append(
-                f'{ingredient.name} ({ingredient.measurement_unit}) - {amount}')
+                f'{ingredient.name} ({ingredient.measurement_unit}) - {amount}'
+            )
 
         file_data = '\n'.join(result).encode('utf-8')
         response = HttpResponse(file_data, content_type='text/plain')
-        response['Content-Disposition'] = 'attachment; filename=shopping_cart.txt'
+        response['Content-Disposition'] = (
+            'attachment; filename=shopping_cart.txt')
 
         return response
 
