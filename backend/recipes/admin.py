@@ -1,7 +1,7 @@
 from django.contrib import admin
 
-from recipes.models import (Tag, Recipe, Ingredient,
-                            IngredientToRecipe, FavoriteRecipe)
+from recipes.models import (FavoriteRecipe, Ingredient, IngredientToRecipe,
+                            Recipe, Tag)
 
 
 @admin.register(Tag)
@@ -21,12 +21,13 @@ class RecipeAdmin(admin.ModelAdmin):
         'image',
         'text',
         'cooking_time',
-        # 'published',
-        # 'is_favorited',
-        # 'is_in_shopping_cart'
+        'is_favorite'
     )
-    list_filter = ('name', 'author',)
+    list_filter = ('name', 'author', 'tags')
     inlines = (IngredientInLine,)
+
+    def is_favorite(self, obj):
+        return obj.favorite.count()
 
 
 @admin.register(Ingredient)

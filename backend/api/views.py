@@ -1,22 +1,21 @@
+from django.db.models import Exists, OuterRef, Sum
 from django.http import HttpResponse
-from rest_framework.generics import ListAPIView
-from rest_framework import viewsets, mixins, permissions, status
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action
-from django.db.models import Exists, OuterRef
+from rest_framework.generics import ListAPIView
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 
+from recipes.models import (FavoriteRecipe, Ingredient, IngredientToRecipe,
+                            Recipe, RecipeInShoppingList, Tag)
+from users.models import CustomUser, Subscription
 
 from .permissions import IsAuthorOrReadOnly
-from users.models import Subscription, CustomUser
-from recipes.models import (Tag, Recipe,
-                            Ingredient, FavoriteRecipe,
-                            IngredientToRecipe, RecipeInShoppingList)
-from .serializers import (SubscriptionSerializer, SubscriptionListSerializer,
-                          TagSerializer, FavoriteSerializer,
-                          IngredientSerializer, RecipeSerializer,
+from .serializers import (FavoriteSerializer, IngredientSerializer,
                           RecipeCreateSerializer,
-                          RecipeInShoppingListSerializer)
+                          RecipeInShoppingListSerializer, RecipeSerializer,
+                          SubscriptionListSerializer, SubscriptionSerializer,
+                          TagSerializer)
 
 
 class SubscriptionViewSet(viewsets.GenericViewSet):
@@ -40,14 +39,13 @@ class SubscriptionViewSet(viewsets.GenericViewSet):
                     instance=author, context=self.get_serializer_context())
                 return Response(
                     serializer.data, status=status.HTTP_201_CREATED)
-            else:
-                return Response(
-                    {'error': 'Подписка уже оформлена'},
-                    status=status.HTTP_400_BAD_REQUEST)
-        elif request.method == 'DELETE':
+            return Response(
+                {'error': 'Подписка уже оформлена'},
+                status=status.HTTP_400_BAD_REQUEST)
+        else:
             subscription = Subscription.objects.filter(
                 author=author, user=request.user)
-            if subscription:
+            if subscription.exists():
                 subscription.delete()
                 return Response(status=status.HTTP_204_NO_CONTENT)
             return Response(
@@ -104,9 +102,10 @@ class RecipeViewSet(viewsets.ModelViewSet):
     def favorite(self, request, pk=None):
         user = self.request.user
         recipe = self.get_object()
+        favorite_queryset = FavoriteRecipe.objects.filter(
+            user=user, recipe=recipe)
         if request.method == 'POST':
-            if not FavoriteRecipe.objects.filter(
-                    user=user, recipe=recipe).exists():
+            if not favorite_queryset.exists():
                 favorite = FavoriteRecipe.objects.create(
                     user=user, recipe=recipe)
                 serializer = FavoriteSerializer(favorite)
@@ -118,14 +117,12 @@ class RecipeViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_400_BAD_REQUEST)
 
         if request.method == 'DELETE':
-            favorites = FavoriteRecipe.objects.filter(user=user, recipe=recipe)
-            if favorites.exists():
-                favorites.delete()
+            if favorite_queryset.exists():
+                favorite_queryset.delete()
                 return Response(status=status.HTTP_204_NO_CONTENT)
-            else:
-                return Response(
-                    {'error': 'Рецепт не находится в избранном.'},
-                    status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {'error': 'Рецепт не находится в избранном.'},
+                status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=['post', 'delete'])
     def shopping_cart(self, request, pk=None):
@@ -156,23 +153,16 @@ class RecipeViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['GET'])
     def download_shopping_cart(self, request):
-        items = RecipeInShoppingList.objects.filter(user=request.user)
-        ingredients = {}
-        for item in items:
-            recipe = item.recipe
-            for ingredient in recipe.ingredients.all():
-                if ingredient.id in ingredients.keys():
-                    ingredients[ingredient.id] += IngredientToRecipe.objects.\
-                        get(recipe=recipe, ingredient=ingredient).amount
-                else:
-                    ingredients[ingredient.id] = IngredientToRecipe.objects.\
-                        get(recipe=recipe, ingredient=ingredient).amount
+        ingredients = IngredientToRecipe.objects.filter(
+            recipe__recipeinshoppinglist__user=request.user).values(
+            'ingredient__name', 'ingredient__measurement_unit').annotate(
+            amount=Sum('amount'))
         result = []
-        for id, amount in ingredients.items():
-            ingredient = Ingredient.objects.get(id=id)
-            result.append(
-                f'{ingredient.name} ({ingredient.measurement_unit}) - {amount}'
-            )
+        for ingredient in ingredients:
+            name = ingredient['ingredient__name']
+            unit = ingredient['ingredient__measurement_unit']
+            amount = ingredient['amount']
+            result.append(f'{name} ({unit}) - {amount}')
 
         file_data = '\n'.join(result).encode('utf-8')
         response = HttpResponse(file_data, content_type='text/plain')

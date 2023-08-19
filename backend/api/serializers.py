@@ -1,11 +1,10 @@
-from rest_framework import serializers
 from drf_extra_fields.fields import Base64ImageField
-from django.core.exceptions import ValidationError
+from rest_framework import serializers
+from rest_framework.pagination import PageNumberPagination
 
-from users.models import Subscription, CustomUser
-from recipes.models import (Tag, Recipe,
-                            Ingredient, IngredientToRecipe,
-                            FavoriteRecipe, RecipeInShoppingList)
+from recipes.models import (FavoriteRecipe, Ingredient, IngredientToRecipe,
+                            Recipe, RecipeInShoppingList, Tag)
+from users.models import CustomUser, Subscription
 
 
 class AuthorSerializer(serializers.ModelSerializer):
@@ -127,14 +126,49 @@ class RecipeCreateSerializer(serializers.ModelSerializer):
             'cooking_time'
         )
 
+    def validate(self, data):
+        ingredients = data['ingredients']
+        ingredients_id = set()
+        for ingredient in ingredients:
+            if not ingredients:
+                raise serializers.ValidationError('Не указаны ингредиенты')
+            if ingredient['id'] in ingredients_id:
+                raise serializers.ValidationError(
+                    'Ингредиент в рецепте не может дублироваться.'
+                )
+            ingredients_id.add(ingredient['id'])
+        tags = data['tags']
+        tags_id = set()
+        for tag in tags:
+            if not tags:
+                raise serializers.ValidationError('Не указаны теги')
+            if tag in tags_id:
+                raise serializers.ValidationError(
+                    'Тег в рецепте не может дублироваться.'
+                )
+            tags_id.add(tag)
+        return data
+
     def create(self, validated_data):
         ingredients = validated_data.pop('ingredients', None)
-        if not ingredients:
-            raise ValidationError('Не указаны ингредиенты')
         tags = validated_data.pop('tags', None)
-        if not tags:
-            raise ValidationError('Не указаны теги')
         instance = Recipe.objects.create(**validated_data)
+        self.create_ingredients_for_recipe(instance, ingredients, tags)
+        instance.tags.set(tags)
+        return instance
+
+    def update(self, instance, validated_data):
+        ingredients = validated_data.pop('ingredients', None)
+        tags = validated_data.pop('tags', None)
+        if ingredients:
+            instance.ingredients.clear()
+            instance.tags.clear()
+            self.create_ingredients_for_recipe(instance, ingredients, tags)
+        return instance
+
+    def create_ingredients_for_recipe(self, instance, ingredients, tags):
+        for tag in tags:
+            instance.tags.add(tag)
         IngredientToRecipe.objects.bulk_create([
             IngredientToRecipe(
                 recipe=instance,
@@ -142,23 +176,6 @@ class RecipeCreateSerializer(serializers.ModelSerializer):
                 amount=ingredient.get('amount')
             ) for ingredient in ingredients
         ])
-        instance.tags.set(tags)
-
-        return instance
-
-    def update(self, instance, validated_data):
-        ingredients = validated_data.pop('ingredients', None)
-        if ingredients:
-            instance.ingredients.clear()
-            IngredientToRecipe.objects.bulk_create([
-                IngredientToRecipe(
-                    recipe=instance,
-                    ingredient=ingredient.get('id'),
-                    amount=ingredient.get('amount')
-                ) for ingredient in ingredients
-            ])
-
-        return instance
 
     def to_representation(self, instance):
         serializer = RecipeSerializer(instance=instance, context=self.context)
@@ -183,8 +200,11 @@ class SubscriptionSerializer(serializers.ModelSerializer):
 
     def get_recipes(self, obj):
         recipes = Recipe.objects.filter(author=obj)
-        serializer = RecipeSerializer(recipes, many=True)
-        return serializer.data
+        paginator = PageNumberPagination()
+        result_page = paginator.paginate_queryset(
+            recipes, self.context['request'])
+        serializer = RecipeSerializer(result_page, many=True)
+        return paginator.get_paginated_response(serializer.data).data
 
 
 class SubscriptionListSerializer(serializers.ModelSerializer):

@@ -1,16 +1,19 @@
 import os
-
 from pathlib import Path
+# from dotenv import load_dotenv
 
+# load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = 'django-insecure-&s+55!)1s+d&^by4@duckys*+4(g4o3uokppm5y&7g6io0a(0#'
+# SECRET_KEY = os.getenv('SECRET_KEY', '123')
 
 DEBUG = True
+# DEBUG = False
 
 ALLOWED_HOSTS = []
-# ALLOWED_HOSTS = ['62.84.120.208', '127.0.0.1', 'localhost', 'foodgramm.myftp.org']
+# ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',')
 
 INSTALLED_APPS = [
     'django.contrib.admin',
