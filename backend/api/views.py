@@ -2,8 +2,6 @@ from django.db.models import Exists, OuterRef, Sum
 from django.http import HttpResponse
 from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.generics import ListAPIView
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from recipes.models import (FavoriteRecipe, Ingredient, IngredientToRecipe,
@@ -11,10 +9,10 @@ from recipes.models import (FavoriteRecipe, Ingredient, IngredientToRecipe,
 from users.models import CustomUser, Subscription
 
 from .permissions import IsAuthorOrReadOnly
-from .serializers import (FavoriteSerializer, IngredientSerializer,
+from .serializers import (IngredientSerializer,
                           RecipeCreateSerializer,
-                          RecipeInShoppingListSerializer, RecipeSerializer,
-                          SubscriptionListSerializer, SubscriptionSerializer,
+                          RecipeSerializer,
+                          SubscriptionSerializer,
                           TagSerializer)
 
 
@@ -53,13 +51,12 @@ class SubscriptionViewSet(viewsets.GenericViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-
-class SubscriptionListView(ListAPIView):
-    serializer_class = SubscriptionListSerializer
-    permission_classes = (IsAuthenticated,)
-
-    def get_queryset(self):
-        return Subscription.objects.filter(user=self.request.user)
+    @action(detail=False, methods=['GET'], url_path="subscriptions")
+    def subscriptions(self, request, *args, **kwargs):
+        queryset = self.get_queryset().filter(subscribers__user=request.user)
+        page = self.paginate_queryset(queryset)
+        serializer = self.get_serializer(page, many=True)
+        return self.get_paginated_response(serializer.data)
 
 
 class TagViewSet(mixins.ListModelMixin,
@@ -98,58 +95,40 @@ class RecipeViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(author=self.request.user)
 
-    @action(detail=True, methods=['post', 'delete'])
-    def favorite(self, request, pk=None):
+    def create_or_delete(self, request, model, pk=None):
         user = self.request.user
         recipe = self.get_object()
-        favorite_queryset = FavoriteRecipe.objects.filter(
-            user=user, recipe=recipe)
         if request.method == 'POST':
-            if not favorite_queryset.exists():
-                favorite = FavoriteRecipe.objects.create(
-                    user=user, recipe=recipe)
-                serializer = FavoriteSerializer(favorite)
+            queryset = model.objects.filter(
+                user=user, recipe=recipe)
+            if queryset.exists():
                 return Response(
-                    serializer.data, status=status.HTTP_201_CREATED)
+                    {'error': 'Рецепт уже находится в списке.'},
+                    status=status.HTTP_400_BAD_REQUEST)
+            obj = model.objects.create(user=user, recipe=recipe)
+            serializer = self.get_serializer(obj)
+            return Response(
+                serializer.data, status=status.HTTP_201_CREATED)
+        if request.method == 'DELETE':
+            queryset = model.objects.filter(
+                recipe=recipe, user=user)
+            if queryset.exists():
+                queryset.delete()
+                return Response(status=status.HTTP_204_NO_CONTENT)
             else:
                 return Response(
-                    {'error': 'Рецепт уже в избранном.'},
+                    {'error': 'Рецепт не находится в списке.'},
                     status=status.HTTP_400_BAD_REQUEST)
 
-        if request.method == 'DELETE':
-            if favorite_queryset.exists():
-                favorite_queryset.delete()
-                return Response(status=status.HTTP_204_NO_CONTENT)
-            return Response(
-                {'error': 'Рецепт не находится в избранном.'},
-                status=status.HTTP_400_BAD_REQUEST)
+    @action(detail=True, methods=['post', 'delete'])
+    def favorite(self, request, pk=None):
+        return self.create_or_delete(request, model=FavoriteRecipe, pk=pk)
 
     @action(detail=True, methods=['post', 'delete'])
     def shopping_cart(self, request, pk=None):
-        user = self.request.user
-        recipe = self.get_object()
-        if request.method == 'POST':
-            recipe_in_shopping_list, created = RecipeInShoppingList.objects.\
-                get_or_create(recipe=recipe, user=user)
-            if created:
-                serializer = RecipeInShoppingListSerializer(
-                    recipe_in_shopping_list)
-                return Response(
-                    serializer.data, status=status.HTTP_201_CREATED)
-            else:
-                return Response(
-                    {'error': 'Рецепт уже в корзине.'},
-                    status=status.HTTP_400_BAD_REQUEST)
-        if request.method == 'DELETE':
-            items = RecipeInShoppingList.objects.filter(
-                recipe=recipe, user=user)
-            if items.exists():
-                items.delete()
-                return Response(status=status.HTTP_204_NO_CONTENT)
-            else:
-                return Response(
-                    {'error': 'Рецепт отсутствует в корзине.'},
-                    status=status.HTTP_400_BAD_REQUEST)
+        return self.create_or_delete(
+            request, model=RecipeInShoppingList, pk=pk
+        )
 
     @action(detail=False, methods=['GET'])
     def download_shopping_cart(self, request):
@@ -185,20 +164,27 @@ class RecipeViewSet(viewsets.ModelViewSet):
         if tags is not None and len(tags):
             queryset = queryset.filter(tags__slug__in=tags)
 
-        if is_favorited == 'true':
-            user = self.request.user
-            queryset = queryset.annotate(
-                is_favorited=Exists(
-                    FavoriteRecipe.objects.filter(
-                        user=user, recipe=OuterRef('pk'))
-                )
-            ).filter(is_favorited=True)
+        if self.request.user.is_authenticated:
+            if is_favorited == '1':
+                user = self.request.user
+                queryset = queryset.annotate(
+                    is_favorited=Exists(
+                        FavoriteRecipe.objects.filter(
+                            user=user, recipe=OuterRef('pk'))
+                    )
+                ).filter(is_favorited=True)
 
-        if is_in_shopping_cart == 'true':
-            user = self.request.user
-            queryset = queryset.filter()
+            if is_in_shopping_cart == '1':
+                user = self.request.user
+                queryset = queryset.annotate(
+                    is_in_shopping_cart=Exists(
+                        RecipeInShoppingList.objects.filter(
+                            user=user, recipe=OuterRef('pk')
+                        )
+                    )
+                ).filter(is_in_shopping_cart=True)
 
         if slug:
             queryset = queryset.filter(tags__slug=slug)
 
-        return queryset
+        return queryset.distinct()

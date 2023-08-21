@@ -4,7 +4,7 @@ from rest_framework.pagination import PageNumberPagination
 
 from recipes.models import (FavoriteRecipe, Ingredient, IngredientToRecipe,
                             Recipe, RecipeInShoppingList, Tag)
-from users.models import CustomUser, Subscription
+from users.models import CustomUser
 
 
 class AuthorSerializer(serializers.ModelSerializer):
@@ -205,20 +205,3 @@ class SubscriptionSerializer(serializers.ModelSerializer):
             recipes, self.context['request'])
         serializer = RecipeSerializer(result_page, many=True)
         return paginator.get_paginated_response(serializer.data).data
-
-
-class SubscriptionListSerializer(serializers.ModelSerializer):
-    author = AuthorSerializer(read_only=True)
-    recipes = RecipeSerializer(many=True, read_only=True)
-    recipes_count = serializers.SerializerMethodField()
-    is_subscribed = serializers.SerializerMethodField()
-
-    class Meta:
-        model = Subscription
-        fields = ('author', 'is_subscribed', 'recipes', 'recipes_count')
-
-    def get_is_subscribed(self, obj):
-        return obj.user.subscriptions.filter(author=obj.author).exists()
-
-    def get_recipes_count(self, obj):
-        return Recipe.objects.filter(author=obj.author).count()
