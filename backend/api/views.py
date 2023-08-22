@@ -7,7 +7,6 @@ from rest_framework.response import Response
 from recipes.models import (FavoriteRecipe, Ingredient, IngredientToRecipe,
                             Recipe, RecipeInShoppingList, Tag)
 from users.models import CustomUser, Subscription
-
 from .permissions import IsAuthorOrReadOnly
 from .serializers import (IngredientSerializer,
                           RecipeCreateSerializer,
@@ -40,16 +39,15 @@ class SubscriptionViewSet(viewsets.GenericViewSet):
             return Response(
                 {'error': 'Подписка уже оформлена'},
                 status=status.HTTP_400_BAD_REQUEST)
-        else:
-            subscription = Subscription.objects.filter(
-                author=author, user=request.user)
-            if subscription.exists():
-                subscription.delete()
-                return Response(status=status.HTTP_204_NO_CONTENT)
-            return Response(
-                {'error': 'Вы не являетесь подписчиком данного пользователя'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        subscription = Subscription.objects.filter(
+            author=author, user=request.user)
+        if subscription.exists():
+            subscription.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        return Response(
+            {'error': 'Вы не являетесь подписчиком данного пользователя'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
     @action(detail=False, methods=['GET'], url_path="subscriptions")
     def subscriptions(self, request, *args, **kwargs):
@@ -98,9 +96,8 @@ class RecipeViewSet(viewsets.ModelViewSet):
     def create_or_delete(self, request, model, pk=None):
         user = self.request.user
         recipe = self.get_object()
+        queryset = model.objects.filter(user=user, recipe=recipe)
         if request.method == 'POST':
-            queryset = model.objects.filter(
-                user=user, recipe=recipe)
             if queryset.exists():
                 return Response(
                     {'error': 'Рецепт уже находится в списке.'},
@@ -109,16 +106,12 @@ class RecipeViewSet(viewsets.ModelViewSet):
             serializer = self.get_serializer(obj)
             return Response(
                 serializer.data, status=status.HTTP_201_CREATED)
-        if request.method == 'DELETE':
-            queryset = model.objects.filter(
-                recipe=recipe, user=user)
-            if queryset.exists():
-                queryset.delete()
-                return Response(status=status.HTTP_204_NO_CONTENT)
-            else:
-                return Response(
-                    {'error': 'Рецепт не находится в списке.'},
-                    status=status.HTTP_400_BAD_REQUEST)
+        if queryset.exists():
+            queryset.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        return Response(
+            {'error': 'Рецепт не находится в списке.'},
+            status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=['post', 'delete'])
     def favorite(self, request, pk=None):
@@ -135,13 +128,13 @@ class RecipeViewSet(viewsets.ModelViewSet):
         ingredients = IngredientToRecipe.objects.filter(
             recipe__recipeinshoppinglist__user=request.user).values(
             'ingredient__name', 'ingredient__measurement_unit').annotate(
-            amount=Sum('amount'))
+            quantity=Sum('amount'))
         result = []
         for ingredient in ingredients:
             name = ingredient['ingredient__name']
             unit = ingredient['ingredient__measurement_unit']
-            amount = ingredient['amount']
-            result.append(f'{name} ({unit}) - {amount}')
+            quantity = ingredient['quantity']
+            result.append(f'{name} ({unit}) - {quantity}')
 
         file_data = '\n'.join(result).encode('utf-8')
         response = HttpResponse(file_data, content_type='text/plain')
