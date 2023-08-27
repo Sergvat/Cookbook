@@ -1,10 +1,9 @@
 from drf_extra_fields.fields import Base64ImageField
 from rest_framework import serializers
-from rest_framework.pagination import PageNumberPagination
 
 from recipes.models import (FavoriteRecipe, Ingredient, IngredientToRecipe,
                             Recipe, RecipeInShoppingList, Tag)
-from users.models import CustomUser
+from users.models import CustomUser, Subscription
 
 
 class AuthorSerializer(serializers.ModelSerializer):
@@ -16,7 +15,10 @@ class AuthorSerializer(serializers.ModelSerializer):
                   'last_name', 'is_subscribed')
 
     def get_is_subscribed(self, obj):
-        return obj.subscriptions.filter(user=obj).exists()
+        user = self.context['request'].user
+        if user:
+            return Subscription.objects.filter(author=obj, user=user).exists()
+        return False
 
 
 class TagSerializer(serializers.ModelSerializer):
@@ -107,6 +109,12 @@ class FavoriteSerializer(serializers.ModelSerializer):
         fields = ('id', 'name', 'image', 'cooking_time')
 
 
+class RecipeFavoriteSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Recipe
+        fields = ('id', 'name', 'image', 'cooking_time')
+
+
 class RecipeCreateSerializer(serializers.ModelSerializer):
     ingredients = RecipeIngredienCreateSerialier(many=True)
     image = Base64ImageField()
@@ -164,7 +172,7 @@ class RecipeCreateSerializer(serializers.ModelSerializer):
             instance.ingredients.clear()
             instance.tags.clear()
             self.create_ingredients_for_recipe(instance, ingredients, tags)
-        return instance
+        return super().update(instance, validated_data)
 
     def create_ingredients_for_recipe(self, instance, ingredients, tags):
         for tag in tags:
@@ -196,12 +204,12 @@ class SubscriptionSerializer(serializers.ModelSerializer):
         return Recipe.objects.filter(author=obj).count()
 
     def get_is_subscribed(self, obj):
-        return obj.subscriptions.filter(author=obj).exists()
+        user = self.context['request'].user
+        if user:
+            return Subscription.objects.filter(author=obj, user=user).exists()
+        return False
 
     def get_recipes(self, obj):
         recipes = Recipe.objects.filter(author=obj)
-        paginator = PageNumberPagination()
-        result_page = paginator.paginate_queryset(
-            recipes, self.context['request'])
-        serializer = RecipeSerializer(result_page, many=True)
-        return paginator.get_paginated_response(serializer.data).data
+        serializer = RecipeFavoriteSerializer(recipes, many=True)
+        return serializer.data

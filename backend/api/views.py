@@ -2,25 +2,28 @@ from django.db.models import Exists, OuterRef, Sum
 from django.http import HttpResponse
 from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 
 from recipes.models import (FavoriteRecipe, Ingredient, IngredientToRecipe,
                             Recipe, RecipeInShoppingList, Tag)
 from users.models import CustomUser, Subscription
 from .permissions import IsAuthorOrReadOnly
-from .serializers import (IngredientSerializer,
+from .serializers import (FavoriteSerializer, IngredientSerializer,
                           RecipeCreateSerializer,
-                          RecipeSerializer,
-                          SubscriptionSerializer,
-                          TagSerializer)
+                          RecipeInShoppingListSerializer, RecipeSerializer,
+                          SubscriptionSerializer, TagSerializer)
 
 
 class SubscriptionViewSet(viewsets.GenericViewSet):
     queryset = CustomUser.objects.all()
     serializer_class = SubscriptionSerializer
     permission_classes = (permissions.IsAuthenticated,)
+    pagination_class = PageNumberPagination
 
-    @action(detail=True, methods=["POST", "DELETE"], url_path="subscribe")
+    @action(detail=True,
+            methods=["POST", "DELETE"], url_path="subscribe",
+            permission_classes=[permissions.IsAuthenticated])
     def subscribe(self, request, *args, **kwargs):
         author = self.get_object()
         if request.method == 'POST':
@@ -49,7 +52,9 @@ class SubscriptionViewSet(viewsets.GenericViewSet):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    @action(detail=False, methods=['GET'], url_path="subscriptions")
+    @action(detail=False,
+            methods=['GET'], url_path="subscriptions",
+            permission_classes=[permissions.IsAuthenticated])
     def subscriptions(self, request, *args, **kwargs):
         queryset = self.get_queryset().filter(subscribers__user=request.user)
         page = self.paginate_queryset(queryset)
@@ -88,6 +93,10 @@ class RecipeViewSet(viewsets.ModelViewSet):
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
             return RecipeCreateSerializer
+        if self.action == 'favorite':
+            return FavoriteSerializer
+        if self.action == 'shopping_cart':
+            return RecipeInShoppingListSerializer
         return RecipeSerializer
 
     def perform_create(self, serializer):
@@ -113,17 +122,23 @@ class RecipeViewSet(viewsets.ModelViewSet):
             {'error': 'Рецепт не находится в списке.'},
             status=status.HTTP_400_BAD_REQUEST)
 
-    @action(detail=True, methods=['post', 'delete'])
+    @action(detail=True,
+            methods=['post', 'delete'],
+            permission_classes=[permissions.IsAuthenticated])
     def favorite(self, request, pk=None):
         return self.create_or_delete(request, model=FavoriteRecipe, pk=pk)
 
-    @action(detail=True, methods=['post', 'delete'])
+    @action(detail=True,
+            methods=['post', 'delete'],
+            permission_classes=[permissions.IsAuthenticated])
     def shopping_cart(self, request, pk=None):
         return self.create_or_delete(
             request, model=RecipeInShoppingList, pk=pk
         )
 
-    @action(detail=False, methods=['GET'])
+    @action(detail=False,
+            methods=['GET'],
+            permission_classes=[permissions.IsAuthenticated])
     def download_shopping_cart(self, request):
         ingredients = IngredientToRecipe.objects.filter(
             recipe__recipeinshoppinglist__user=request.user).values(
@@ -140,7 +155,6 @@ class RecipeViewSet(viewsets.ModelViewSet):
         response = HttpResponse(file_data, content_type='text/plain')
         response['Content-Disposition'] = (
             'attachment; filename=shopping_cart.txt')
-
         return response
 
     def get_queryset(self):
