@@ -72,8 +72,6 @@ jobs:
           sudo docker-compose stop
           sudo docker-compose rm backend
           sudo docker-compose up -d
-          sudo docker compose -f docker-compose.production.yml exec backend python manage.py migrate
-          sudo docker compose -f docker-compose.production.yml exec backend python manage.py collectstatic --no-input
 
   # send_message:
   #   runs-on: ubuntu-latest
