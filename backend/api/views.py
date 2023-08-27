@@ -8,7 +8,7 @@ from rest_framework.response import Response
 from recipes.models import (FavoriteRecipe, Ingredient, IngredientToRecipe,
                             Recipe, RecipeInShoppingList, Tag)
 from users.models import CustomUser, Subscription
-# from .permissions import IsAuthenticatedOrReadOnly
+from .permissions import IsAuthorOrReadOnly
 from .serializers import (FavoriteSerializer, IngredientSerializer,
                           RecipeCreateSerializer,
                           RecipeInShoppingListSerializer, RecipeSerializer,
@@ -88,7 +88,7 @@ class IngredientViewSet(mixins.ListModelMixin,
 class RecipeViewSet(viewsets.ModelViewSet):
     queryset = Recipe.objects.all()
     serializer_class = RecipeSerializer
-    permission_classes = (permissions.IsAuthenticatedOrReadOnly,)
+    permission_classes = (IsAuthorOrReadOnly,)
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
