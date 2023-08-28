@@ -2,12 +2,12 @@ from django.db.models import Exists, OuterRef, Sum
 from django.http import HttpResponse
 from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 
 from recipes.models import (FavoriteRecipe, Ingredient, IngredientToRecipe,
                             Recipe, RecipeInShoppingList, Tag)
 from users.models import CustomUser, Subscription
+from .paginations import CustomPagination
 from .permissions import IsAuthorOrReadOnly
 from .serializers import (FavoriteSerializer, IngredientSerializer,
                           RecipeCreateSerializer,
@@ -19,7 +19,7 @@ class SubscriptionViewSet(viewsets.GenericViewSet):
     queryset = CustomUser.objects.all()
     serializer_class = SubscriptionSerializer
     permission_classes = (permissions.IsAuthenticated,)
-    pagination_class = PageNumberPagination
+    pagination_class = CustomPagination
 
     @action(detail=True,
             methods=["POST", "DELETE"], url_path="subscribe",
@@ -89,6 +89,7 @@ class RecipeViewSet(viewsets.ModelViewSet):
     queryset = Recipe.objects.all()
     serializer_class = RecipeSerializer
     permission_classes = (IsAuthorOrReadOnly,)
+    pagination_class = CustomPagination
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
