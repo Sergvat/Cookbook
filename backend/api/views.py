@@ -9,10 +9,10 @@ from recipes.models import (FavoriteRecipe, Ingredient, IngredientToRecipe,
 from users.models import CustomUser, Subscription
 from .paginations import CustomPagination
 from .permissions import IsAuthorOrReadOnly
-from .serializers import (FavoriteSerializer, IngredientSerializer,
-                          RecipeCreateSerializer,
+from .serializers import (AuthorSerializer, FavoriteSerializer,
+                          IngredientSerializer, RecipeCreateSerializer,
                           RecipeInShoppingListSerializer, RecipeSerializer,
-                          SubscriptionSerializer, TagSerializer, AuthorSerializer)
+                          SubscriptionSerializer, TagSerializer)
 
 
 class SubscriptionViewSet(mixins.RetrieveModelMixin, viewsets.GenericViewSet):
