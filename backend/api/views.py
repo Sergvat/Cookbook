@@ -12,10 +12,10 @@ from .permissions import IsAuthorOrReadOnly
 from .serializers import (FavoriteSerializer, IngredientSerializer,
                           RecipeCreateSerializer,
                           RecipeInShoppingListSerializer, RecipeSerializer,
-                          SubscriptionSerializer, TagSerializer)
+                          SubscriptionSerializer, TagSerializer, AuthorSerializer)
 
 
-class SubscriptionViewSet(viewsets.GenericViewSet):
+class SubscriptionViewSet(mixins.RetrieveModelMixin, viewsets.GenericViewSet):
     queryset = CustomUser.objects.all()
     serializer_class = SubscriptionSerializer
     permission_classes = (permissions.IsAuthenticated,)
@@ -60,6 +60,13 @@ class SubscriptionViewSet(viewsets.GenericViewSet):
         page = self.paginate_queryset(queryset)
         serializer = self.get_serializer(page, many=True)
         return self.get_paginated_response(serializer.data)
+    
+    @action(detail=False, 
+            methods=['GET'], url_path='me', 
+            permission_classes=[permissions.IsAuthenticated])
+    def me(self, request):
+        serializer = AuthorSerializer(request.user, context=self.get_serializer_context())
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class TagViewSet(mixins.ListModelMixin,
